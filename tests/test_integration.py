@@ -67,7 +67,7 @@ def test_redis_lifecycle():
     async def scenario():
         prefix = 'insightbot:test:' + uuid.uuid4().hex + ':'
         client = redis.from_url(url, decode_responses=True)
-        history = RedisChatHistory(client, max_messages=2, ttl_seconds=2, prefix=prefix)
+        history = RedisChatHistory(client, max_messages=2, ttl_seconds=5, prefix=prefix)
         try:
             pair = [HumanMessage('question'), AIMessage('answer')]
             await history.append('a', pair)
@@ -78,12 +78,12 @@ def test_redis_lifecycle():
             assert await history.get('b') == []
             await history.close()
             client = redis.from_url(url, decode_responses=True)
-            history = RedisChatHistory(client, 2, 2, prefix)
+            history = RedisChatHistory(client, 2, 5, prefix)
             assert len(await history.get('a')) == 2
             await history.clear('a')
             assert await history.get('a') == []
             await history.append('a', pair)
-            await asyncio.sleep(2.2)
+            await asyncio.sleep(5.2)
             assert await history.get('a') == []
         finally:
             await client.delete(prefix+'a')

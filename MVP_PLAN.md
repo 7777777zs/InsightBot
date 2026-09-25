@@ -157,7 +157,7 @@ Bot:  ……
 | LLM 编造数字 | prompt 要求所有数字必须来自工具结果；返回里附上执行过的 SQL 方便核对 |
 | SQL 注入 / 删库 | 三层防护（见 4.2） |
 | 查询太慢或结果太大 | 超时 5 秒 + LIMIT + 输出截断 |
-| token 成本 | 历史只存问答对、结果截断、默认用 gpt-4o-mini |
+| token 成本 | 历史只存问答对、结果截断、默认用 gpt-4.1-mini（验收时 4o-mini 心算不稳定） |
 | 业务口径歧义（"销售额"算不算退款？） | 表注释写清口径；prompt 要求说明假设 |
 
 ---
@@ -195,3 +195,5 @@ are in `evaluation/cases.json` and README.md.
 Verification status and outstanding acceptance gates are in `ACCEPTANCE.md`.
 The MVP must not be labelled fully accepted until real PostgreSQL/Redis, fresh
 Compose startup, and live bilingual accuracy checks have passed.
+
+Update 2026-09-25: all acceptance gates passed with gpt-4.1-mini (EN 10/10, ZH 10/10). See ACCEPTANCE.md.

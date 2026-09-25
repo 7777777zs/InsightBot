@@ -26,6 +26,7 @@ CREATE TABLE orders (
     status      TEXT NOT NULL CHECK (status IN ('completed', 'refunded', 'cancelled'))
 );
 COMMENT ON TABLE orders IS 'One row per order. Revenue should normally count only status = completed';
+COMMENT ON COLUMN orders.customer_id IS 'Foreign key to customers.id. Join with orders.customer_id = customers.id';
 
 CREATE TABLE order_items (
     id         SERIAL PRIMARY KEY,
@@ -35,6 +36,8 @@ CREATE TABLE order_items (
     unit_price NUMERIC(10, 2) NOT NULL
 );
 COMMENT ON TABLE order_items IS 'Line items. Line revenue = quantity * unit_price (price at time of sale)';
+COMMENT ON COLUMN order_items.order_id IS 'Foreign key to orders.id';
+COMMENT ON COLUMN order_items.product_id IS 'Foreign key to products.id';
 
 SELECT setseed(0.42);
 

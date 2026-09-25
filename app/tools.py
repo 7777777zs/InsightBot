@@ -161,7 +161,8 @@ def build_tools(db: Database) -> list[BaseTool]:
     ) -> tuple[str, dict]:
         """Quick aggregation on a SINGLE table without writing SQL, e.g. count of rows per status,
         or monthly totals (time_column='order_date', time_grain='month').
-        For anything spanning several tables use run_sql_query instead."""
+        It cannot filter rows (no WHERE). For filtered figures such as completed orders only,
+        or anything spanning several tables, use run_sql_query instead."""
         try:
             sql = build_aggregate_sql(db, table, agg, column, group_by, time_column, time_grain, limit)
             return _query_output(db.run_select(sql))

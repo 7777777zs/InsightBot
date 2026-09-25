@@ -1,36 +1,47 @@
 # MVP acceptance record
 
-Date: 2026-09-22. Implementation is ready for external acceptance; the full MVP is not yet signed off.
+Date: 2026-09-25. **All MVP gates passed.** Model: `gpt-4.1-mini` (temperature 0). Dataset: fresh seed from `db/init.sql` (500 customers, 20 products, 3,000 orders, 7,500 line items) in an isolated Compose project (`insightbot-acceptance3`, ports 18000/15432/16379) on Windows 11 with Docker 29.8.
 
-| Gate | Result | Evidence / remaining work |
+| Gate | Result | Evidence |
 |---|---|---|
-| Python 3.12 setup | Passed | Fresh workspace Python 3.12.13 virtual environment installed from pinned requirements-dev.txt |
-| Fast tests | Passed | 47 passed; 8 integration tests skipped because service URLs are absent |
-| Browser smoke | Passed | Headless Microsoft Edge, scripted model and SQLite: answers stream, SQL displays, follow-up requests, safe text, reset, mobile fit, SSE error recovery |
-| PostgreSQL integration | Unverified | Docker unavailable; configure TEST_DATABASE_URL and run integration tests |
-| Redis integration | Unverified | Configure TEST_REDIS_URL; tests cover pair trimming, isolation, expiration, refresh, reconnection and deletion |
-| Fresh Compose startup | Unverified | Docker unavailable; README provides isolated project and ports |
-| English accuracy >=8/10 | Unverified | No OpenAI key configured; run evaluation and human review |
-| Chinese accuracy >=8/10 | Unverified | Same; all city follow-ups must also pass |
-| Live progress <3 seconds | Unverified | Evaluation measures session receipt separately from first tool, first token and completion |
-| API restart retains Redis history | Unverified | Redis reconnection test exists; confirm API restart against running Redis during acceptance |
+| Python 3.12 setup | Passed | Python 3.12.13 venv from pinned `requirements-dev.txt` |
+| Fast tests | Passed | 47 passed, 8 integration skipped without service URLs |
+| Browser smoke | Passed (2026-09-22) | Headless Edge with scripted model and SQLite; not re-run this round |
+| Fresh Compose startup | Passed | `docker compose -p insightbot-acceptance3 up --build --wait`: all three services healthy |
+| PostgreSQL integration | Passed | 55 passed including all 8 integration tests (reader role write denial, timeout, seeded data) |
+| Redis integration | Passed | Pair trimming, isolation, expiration, refresh, reconnection, deletion |
+| API restart retains Redis history | Passed | Chat → `docker compose restart api` → `/sessions/{id}/history` returned the pair → DELETE 204 → 404 |
+| English accuracy ≥8/10 | Passed: **10/10** | `reports/evaluation.json`; all Edmonton/Calgary follow-ups correct |
+| Chinese accuracy ≥8/10 | Passed: **10/10** | Same report; all city follow-ups correct |
+| Live progress <3 seconds | Passed | Request accepted: max 0.014 s. Median first tool 0.76 s, first answer token 2.7 s, total 3.4 s (max 5.9 s) |
+| Write protection | Passed | 6 manual probes (DELETE, DROP, UPDATE, CTE DELETE injection, "system override" CREATE/pg_sleep, Chinese TRUNCATE). All refused; row counts and `orders.status` checksum unchanged. Guard and reader-role layers are covered by unit and integration tests |
 
-## Reproduce verified tests
+Answers were checked against the reference rows by an automatic numeric comparison (CAD 0.01, 0.01 pp tolerance) and by reading every answer for filters, denominators and follow-up context. Formal human sign-off is recorded with `python -m evaluation.run --review`.
+
+## Findings fixed during acceptance
+
+1. **Integration test timing on Windows**: `localhost` tries IPv6 first and costs about 2 s per connection, which exceeded the Redis test's 2 s TTL. The test TTL is now 5 s, and the docs use `127.0.0.1`.
+2. **LLM mental arithmetic**: gpt-4o-mini computed averages and percentage changes itself and was off by 0.02–0.8 (e.g. average order value 533.36 instead of 533.19). The prompt now requires every derived figure to come from a single SQL query, with no pasted literals.
+3. **Correlated-subquery trap**: `customer_id IN (SELECT customer_id FROM customers …)` silently resolved to the outer `orders.customer_id` and matched every order. Foreign-key column comments were added to `db/init.sql`, and the prompt requires qualified columns with explicit joins.
+4. **Join fan-out**: `COUNT(*)` after joining `order_items` counted line items. The prompt now requires `COUNT(DISTINCT orders.id)`.
+5. **`aggregate` has no filter**: its docstring now tells the model to use `run_sql_query` for filtered figures.
+6. **Model choice**: even after fixes 2–5, gpt-4o-mini failed a gate in 2 of 3 runs (the final division was still done in its head). gpt-4.1-mini scored 60/60 across three runs plus 20/20 on the official run, and was faster (median first token 2.7 s vs 3.4 s). It is now the default.
+
+## Limitations
+
+- Accuracy is measured on 10 fixed questions against one synthetic dataset; it does not prove accuracy on other questions.
+- LLM output is non-deterministic even at temperature 0; the weekly evaluation workflow guards against regressions.
+- "Last month"-style questions are relative to today's date and may return no data from the historical seed.
+
+## Reproduce
 
 ```powershell
+$env:API_PORT='18000'; $env:POSTGRES_PORT='15432'; $env:REDIS_PORT='16379'
+docker compose -p insightbot-acceptance-new up --build --wait
+$env:TEST_DATABASE_URL='postgresql+psycopg://insight_reader:reader_pw@127.0.0.1:15432/insightbot'
+$env:TEST_REDIS_URL='redis://127.0.0.1:16379/0'
 .venv/Scripts/python.exe -m pytest -q -p no:cacheprovider --basetemp .pytest-acceptance
+$env:DATABASE_URL=$env:TEST_DATABASE_URL
+python -m evaluation.run --base-url http://127.0.0.1:18000
+python -m evaluation.run --review
 ```
-
-The Python 3.12 test environment emits an upstream Starlette/AnyIO deprecation warning. It does not fail tests. The earlier system Python 3.14 run additionally emitted compatibility warnings; use the supported 3.12 environment.
-
-For browser smoke, run `python -m tests.browser_demo` and then `python -m tests.browser_smoke` with Playwright and Microsoft Edge available. Screenshots are generated under ignored `.pytest-browser/`. The successful browser run used the system Python 3.14 Playwright installation and the scripted server; it does not establish real-model correctness.
-
-## Complete external acceptance
-
-1. Follow README isolated Compose startup and integration instructions. Do not reuse or delete existing project volumes.
-2. Confirm `/ready`, schema and chat against the seeded database.
-3. Make a chat request, restart only the API, and verify its history is still present. Clear it via the session API.
-4. Run both languages with `python -m evaluation.run`, then `python -m evaluation.run --review`. Review every requested group/value and assumptions against independent reference SQL; SQL strings need not be identical.
-5. Confirm >=8/10 for each language, all Edmonton/Calgary follow-ups correct, and every request-accepted event under three seconds. Record actual latency; do not substitute an immediate session event for answer-token latency.
-6. Manually request DELETE/DROP/UPDATE and try prompt injection; verify reader-role protection and unchanged business data. The agent may decline directly or return a rejected tool attempt, but must never mutate data.
-7. Record results here, including model, dataset, date, totals and limitations. Until then, pending gates remain unverified.

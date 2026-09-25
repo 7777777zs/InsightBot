@@ -57,12 +57,12 @@ $env:API_PORT='18000'
 $env:POSTGRES_PORT='15432'
 $env:REDIS_PORT='16379'
 docker compose -p insightbot-acceptance up --build --wait
-$env:TEST_DATABASE_URL='postgresql+psycopg://insight_reader:reader_pw@localhost:15432/insightbot'
-$env:TEST_REDIS_URL='redis://localhost:16379/0'
+$env:TEST_DATABASE_URL='postgresql+psycopg://insight_reader:reader_pw@127.0.0.1:15432/insightbot'
+$env:TEST_REDIS_URL='redis://127.0.0.1:16379/0'
 python -m pytest -m integration -q
 ```
 
-Integration tests skip when service URLs are absent, and fail if configured services are unreachable. PostgreSQL tests require the seeded demo database and reader role. Write-denial probes are rolled back even if the role is misconfigured. Redis tests use unique keys and clean up only those keys. `docker compose -p insightbot-acceptance down` stops acceptance services while preserving its volume; avoid `down -v` unless intentionally discarding that project's data.
+Use 127.0.0.1 rather than localhost: on Windows, localhost tries IPv6 first and adds about 2 seconds per connection. Integration tests skip when service URLs are absent, and fail if configured services are unreachable. PostgreSQL tests require the seeded demo database and reader role. Write-denial probes are rolled back even if the role is misconfigured. Redis tests use unique keys and clean up only those keys. `docker compose -p insightbot-acceptance down` stops acceptance services while preserving its volume; avoid `down -v` unless intentionally discarding that project's data.
 
 ## Bilingual accuracy evaluation
 

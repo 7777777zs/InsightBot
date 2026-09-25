@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     openai_api_key: str = ""
-    openai_model: str = "gpt-4o-mini"
+    openai_model: str = "gpt-4.1-mini"
 
     # The app connects with a read-only role (see db/init.sql).
     database_url: str = "postgresql+psycopg://insight_reader:reader_pw@localhost:5432/insightbot"

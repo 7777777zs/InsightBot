@@ -1,0 +1,72 @@
+[
+  {
+    "id": 1,
+    "en": "How many customers are there?",
+    "zh": "一共有多少客户？",
+    "reference_sql": "SELECT COUNT(*) AS customers FROM customers",
+    "session_group": "1"
+  },
+  {
+    "id": 2,
+    "en": "How many customers are in each province?",
+    "zh": "每个省的客户数量？",
+    "reference_sql": "SELECT province, COUNT(*) AS customers FROM customers GROUP BY province ORDER BY province",
+    "session_group": "2"
+  },
+  {
+    "id": 3,
+    "en": "What were monthly sales in 2024, counting completed orders only?",
+    "zh": "2024 年每月销售额（只算 completed 订单）？",
+    "reference_sql": "SELECT DATE_TRUNC('month',o.order_date)::date AS month, SUM(i.quantity*i.unit_price) AS revenue FROM orders o JOIN order_items i ON i.order_id=o.id WHERE o.status='completed' AND o.order_date >= DATE '2024-01-01' AND o.order_date < DATE '2025-01-01' GROUP BY 1 ORDER BY 1",
+    "session_group": "3"
+  },
+  {
+    "id": 4,
+    "en": "What are the top five products by units sold on completed orders?",
+    "zh": "已完成订单中销量最高的 5 个产品？",
+    "reference_sql": "SELECT p.name, SUM(i.quantity) AS units FROM orders o JOIN order_items i ON i.order_id=o.id JOIN products p ON p.id=i.product_id WHERE o.status='completed' GROUP BY p.id,p.name ORDER BY units DESC,p.name LIMIT 5",
+    "session_group": "4"
+  },
+  {
+    "id": 5,
+    "en": "Which category has the highest completed-order revenue?",
+    "zh": "已完成订单中哪个品类收入最高？",
+    "reference_sql": "SELECT p.category, SUM(i.quantity*i.unit_price) AS revenue FROM orders o JOIN order_items i ON i.order_id=o.id JOIN products p ON p.id=i.product_id WHERE o.status='completed' GROUP BY p.category ORDER BY revenue DESC,p.category LIMIT 1",
+    "session_group": "5"
+  },
+  {
+    "id": 6,
+    "en": "What percentage of all orders were refunded?",
+    "zh": "退款订单占全部订单的百分比是多少？",
+    "reference_sql": "SELECT 100.0*COUNT(*) FILTER (WHERE status='refunded')/NULLIF(COUNT(*),0) AS refund_percent FROM orders",
+    "session_group": "6"
+  },
+  {
+    "id": 7,
+    "en": "What is the average completed order value?",
+    "zh": "已完成订单的平均客单价是多少？",
+    "reference_sql": "SELECT SUM(i.quantity*i.unit_price)/NULLIF(COUNT(DISTINCT o.id),0) AS average_order_value FROM orders o JOIN order_items i ON i.order_id=o.id WHERE o.status='completed'",
+    "session_group": "7"
+  },
+  {
+    "id": 8,
+    "en": "How much did Edmonton customers spend on completed orders?",
+    "zh": "Edmonton 客户已完成订单的消费总额是多少？",
+    "reference_sql": "SELECT SUM(i.quantity*i.unit_price) AS revenue FROM orders o JOIN order_items i ON i.order_id=o.id JOIN customers c ON c.id=o.customer_id WHERE o.status='completed' AND c.city='Edmonton'",
+    "session_group": "cities"
+  },
+  {
+    "id": 9,
+    "en": "And Calgary?",
+    "zh": "那 Calgary 呢？",
+    "reference_sql": "SELECT SUM(i.quantity*i.unit_price) AS revenue FROM orders o JOIN order_items i ON i.order_id=o.id JOIN customers c ON c.id=o.customer_id WHERE o.status='completed' AND c.city='Calgary'",
+    "session_group": "cities"
+  },
+  {
+    "id": 10,
+    "en": "By what percentage is Calgary spending higher or lower than Edmonton, using Edmonton as the baseline?",
+    "zh": "以 Edmonton 为基准，Calgary 的消费额高或低百分之多少？",
+    "reference_sql": "WITH e AS (SELECT SUM(i.quantity*i.unit_price) AS revenue FROM orders o JOIN order_items i ON i.order_id=o.id JOIN customers c ON c.id=o.customer_id WHERE o.status='completed' AND c.city='Edmonton'), c AS (SELECT SUM(i.quantity*i.unit_price) AS revenue FROM orders o JOIN order_items i ON i.order_id=o.id JOIN customers c ON c.id=o.customer_id WHERE o.status='completed' AND c.city='Calgary') SELECT 100.0*(c.revenue-e.revenue)/NULLIF(e.revenue,0) AS percent_change FROM e CROSS JOIN c",
+    "session_group": "cities"
+  }
+]

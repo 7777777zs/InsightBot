@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>InsightBot · Data, in conversation</title>
+<style>
+:root{font:16px/1.6 system-ui,sans-serif;color:#20332b;background:#f5f5ef}*{box-sizing:border-box}body{margin:0}main{max-width:880px;margin:auto;padding:48px 24px}header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #cbd3c9;padding-bottom:22px}h1{font:38px/1.2 Georgia,serif;margin:0}small,.muted{color:#58695f}button{cursor:pointer;border:1px solid #a9baad;background:white;border-radius:6px;padding:10px 18px;font:inherit}button:disabled{opacity:.5;cursor:wait}#intro{padding:32px 0}h2{font:30px Georgia,serif;margin:0 0 12px}#messages article{border-top:1px solid #d6ddd4;padding:20px 0}.answer,.question{white-space:pre-wrap;overflow-wrap:anywhere}.question{font-weight:600;margin-bottom:10px}.answer{min-height:26px}details{font-size:13px;margin-top:12px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#e9eee5;padding:12px}form{position:sticky;bottom:0;background:#f5f5ef;padding:18px 0;display:flex;gap:12px;align-items:end}label{flex:1}textarea{display:block;resize:vertical;min-height:76px;width:100%;font:inherit;border:1px solid #a9baad;border-radius:6px;padding:12px;background:#fff}#send{background:#234d3a;color:white}#status{min-height:26px;color:#42604c}.error{color:#a12d2d}@media(max-width:550px){main{padding:24px 16px}h1{font-size:30px}form{display:block}#send{margin-top:8px;width:100%}}
+</style></head>
+<body><main><header><div><h1>InsightBot</h1><small>E-commerce data · CAD</small></div><button id="reset" type="button">New conversation</button></header>
+<section id="intro"><h2>Ask a business question.</h2><p class="muted">Explore customers, products, and sales in English or Chinese. Every answer comes with the SQL used to investigate it.</p><p>Try: “What were monthly sales in 2024?”</p></section>
+<section id="messages" aria-label="Conversation"></section><p id="status" role="status" aria-live="polite">Ready for your question.</p>
+<form id="chat"><label for="question">Your question<textarea id="question" required maxlength="2000" placeholder="How much did Edmonton customers spend?"></textarea></label><button id="send">Ask InsightBot</button></form>
+<small>Demo dataset. Revenue counts completed orders. Inspect the SQL before using an answer.</small></main>
+<script>
+const $=id=>document.getElementById(id);
+let session=localStorage.getItem('insightbot-session'),busy=false;
+function state(value){busy=value;$('send').disabled=value;$('reset').disabled=value;$('question').disabled=value;}
+function element(tag,text,parent){const node=document.createElement(tag);node.textContent=text;parent.append(node);return node;}
+$('chat').addEventListener('submit',async event=>{
+ event.preventDefault();const question=$('question').value.trim();if(busy||!question)return;
+ state(true);$('intro').hidden=true;const article=element('article','',$('messages'));element('div',question,article).className='question';
+ const answer=element('div','',article);answer.className='answer';const trace=element('details','',article);element('summary','Query activity & SQL',trace);const activity=element('pre','',trace);
+ $('status').textContent='Sending request…';let completed=false,terminal=false;
+ try{
+ const response=await fetch('/chat/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question,session_id:session})});
+ if(!response.ok)throw Error('Request failed ('+response.status+'). Please retry.');
+ const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='';
+ function handle(frame){for(const line of frame.split('\n')){if(!line.startsWith('data: '))continue;const data=JSON.parse(line.slice(6));
+ if(data.type==='session'){session=data.session_id;localStorage.setItem('insightbot-session',session);$('status').textContent='Request accepted. Analyzing…';}
+ if(data.type==='tool_call'){activity.textContent+=data.name+' '+JSON.stringify(data.args)+'\n';$('status').textContent='Checking data…';}
+ if(data.type==='tool_result')activity.textContent+=data.content+'\n';
+ if(data.type==='token'){answer.textContent+=data.content;$('status').textContent='Writing answer…';}
+ if(data.type==='done'){answer.textContent=data.answer;activity.textContent+='\nExecuted SQL\n'+data.sql.join('\n\n');completed=true;terminal=true;$('status').textContent='Complete.';}
+ if(data.type==='error'){terminal=true;throw Error(data.message);}
+ }}
+ try{while(true){const {value,done}=await reader.read();buffer+=decoder.decode(value,{stream:!done});let boundary;while((boundary=buffer.indexOf('\n\n'))>=0){handle(buffer.slice(0,boundary));buffer=buffer.slice(boundary+2);}if(done)break;}
+ if(!terminal)throw Error('Connection interrupted. The answer may be incomplete.');}finally{await reader.cancel();}
+ }catch(error){element('p',error.message,article).className='error';$('status').textContent='Unable to complete this answer.';}
+ finally{if(completed)$('question').value='';state(false);$('question').focus();}
+});
+$('reset').addEventListener('click',async()=>{if(busy)return;state(true);try{if(session){const r=await fetch('/sessions/'+encodeURIComponent(session),{method:'DELETE'});if(!r.ok)throw Error('Could not clear the session. Retry.');}session=null;localStorage.removeItem('insightbot-session');$('messages').replaceChildren();$('intro').hidden=false;$('status').textContent='New conversation ready.';}catch(error){$('status').textContent=error.message;}finally{state(false);}});
+</script></body></html>
